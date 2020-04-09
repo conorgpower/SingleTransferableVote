@@ -6,10 +6,12 @@
 
 
 import Debug.Trace
-import Data.Maybe
+import Data.List(sortBy, groupBy)
+import Data.Function (on)
 
 type Candidate  = (Char, String)
 type Vote       = [(Char, String)]
+type Count     = (Char, Int)
 
 -------------------------------------------------------------------------------
 -- COMMON DATA OPERATIONS
@@ -18,51 +20,96 @@ type Vote       = [(Char, String)]
 weight :: Double
 weight = 1000
 
-getCandidates :: [[String]] -> [Candidate]
-getCandidates xs = zip ['A'..] (drop 2 (head xs))
+getCandidates :: [Candidate]
+getCandidates = zip ['A'..] (drop 2 (head dirtyVotes))
 
 getVotes :: [[String]] -> [[String]]
 getVotes xs =  [drop 2 x | x <- xs, elem "" x == False]
 
+cleanVotes :: [Vote]
+cleanVotes = pairVotes dirtyVotes
+
 pairVotes :: [[String]] -> [Vote]
-pairVotes xs = [zip ['A'..] x | x <- getVotes xs]
+pairVotes xs = removeAsterisks [zip ['A'..] x | x <- getVotes xs]
 
 findAsterisks :: Vote -> Vote
-findAsterisks xs = filter ((/="*") . snd) xs
+findAsterisks xs = filter ((/= "*") . snd) xs
 
 removeAsterisks :: [Vote] -> [Vote]
-removeAsterisks xss = map findAsterisks xss
+removeAsterisks xs = map findAsterisks xs
 
+sortVote :: Vote -> Vote
+sortVote xs =   sortBy second xs
+                where second (x1, y1) (x2, y2) = compare y1 y2
 
+sortVotes :: [Vote] -> [Vote]
+sortVotes xs = map sortVote xs
 
--- sortVotes :: [[String]] -> [[String]]
--- sortVotes xss = [sort xs | xs <- xss]
+groupVote :: Vote -> [Vote]
+groupVote xs =  groupBy second xs
+                where second (x1, y1) (x2, y2) =  y1==y2
 
---removeAsterisks :: [String] -> [String]
---removeAsterisks vote = [x | x <- vote, x /= "*"]
+groupVotes :: [Vote] -> [[Vote]]
+groupVotes xs = map groupVote xs
+
+-- findDuplicate :: [Vote] -> Vote
+-- findDuplicate [] = []
+-- findDuplicate (x:xs) =  if length x == 1
+--                        then x ++ (findDuplicate xs)
+--                        else return (y)
+
+flatten :: [[Vote]] -> [Vote]
+flatten xss = map concat xss
+
+--samePreference :: Vote -> Vote
+--samePreference xs = filter ((/= ))
+
+checker :: Char -> Vote -> Int
+checker x votes = sum $ map (const 1) $ filter (== (x, "1")) votes
+
+checkAllVotes :: Char -> [Vote] -> [Int]
+checkAllVotes x = map (checker x)
 
 -------------------------------------------------------------------------------
 -- ALTERNATIVE VOTING
 -------------------------------------------------------------------------------
 
 -- Quota 
-getAltQuota :: [[String]] -> Int
-getAltQuota xs = length [x | x <- getVotes xs] `div` 2 + 1
+getAltQuota :: Int
+getAltQuota = 110
+--getAltQuota = length [x | x <- getVotes dirtyVotes] `div` 2 + 1
 
+checkWinner :: [Int] -> Bool
+checkWinner xs = elem True ([x >= getAltQuota | x <- xs])
 
+getWinner :: String
+getWinner = do
+    let x = zip ['A'..'E'] (countVotes cleanVotes)
+    let (y:ys) = sortBy (flip compare `on` snd) x
+    getCandidate (fst y) (getCandidates)
+
+getCandidate :: Char -> [Candidate] -> String
+getCandidate x (y:ys)
+    | x == fst y = snd y
+    | otherwise = getCandidate x ys
+
+countVotes :: [Vote] -> [Int]
+countVotes xs = [sum (checkAllVotes x cleanVotes) | x <- ['A'..'E']]
+
+-- getPreference :: [Vote] -> 
 
 -------------------------------------------------------------------------------
 -- SINGLE TRANSFERABLE VOTE
 -------------------------------------------------------------------------------
 
 -------------------------------------------------------------------------------
--- Voting Data
+-- VOTING DATA
 -------------------------------------------------------------------------------
 
 dirtyVotes :: [[String]]
 dirtyVotes = [
     ["","","D. Abbott","E. Balls","A. Burbhm","D. Milliband","E. Milliband"],
-    ["1","Ms D Abbott MP  ","1","*","4","*","2"],
+    ["1","Ms D Abbott MP  ","1","*","4","2","2"],
     ["2","RtHon B W Ainsworth MP ","5","4","3","1","2"],
     ["3","RtHon D Alexander MP ","5","3","4","1","2"],
     ["4","Ms H Alexander MP ","*","*","1","2","3"],
@@ -340,5 +387,5 @@ dirtyVotes = [
     ["263","RtHon S Woodward MP ","5","3","4","1","2"],
     ["264","Mr P Woolas MP  ","*","*","*","1","*"],
     ["265","Mr D Wright MP  ","*","1","4","2","3"],
-    ["266","Mr I D Wright MP ","5","1","3","4","2"],
+    ["266","Mr I D Wright MP ","5","1","3","3","2"],
     [""]]
